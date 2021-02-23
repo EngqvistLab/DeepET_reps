@@ -5,7 +5,7 @@ DeepET model from Li et al.
 Assuming that you use Miniconda (https://docs.conda.io/en/latest/miniconda.html) or Anaconda (https://www.anaconda.com/) the required packages can be easily installed from the yml file `packages.yml`. In a terminal execute:
 ```bash
 conda env create -f packages.yml
-conda activate tf1
+conda activate deepet
 ```
 
 ## Installation

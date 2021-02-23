@@ -1,4 +1,4 @@
-name: deept
+name: deepet
 channels:
   - bioconda
   - defaults
