@@ -35,7 +35,7 @@ setup(
 	author_email='martin.engqvist@chalmers.se',
 	url='https://github.com/EngqvistLab/DeepET_reps',
     packages=find_packages(exclude=['contrib', 'docs', 'tests*']), #find folders containing scripts, exclude irrelevant ones
-    install_requires=['tensorflow==1.15.0', 'numpy==1.18.1', 'pandas==1.0.1', 'biopython==1.76'],
+    install_requires=['tensorflow==1.15.0', 'numpy==1.18.1', 'pandas==1.0.1', 'biopython==1.76', 'jupyter'],
 	license='GPLv3+',
 	classifiers=[
 	# How mature is this project? Common values are
