@@ -1,6 +1,8 @@
 # Description
 DeepET model from Li et al.
 
+![Figure](concept.png)
+
 ## Requirements
 Assuming that you use Miniconda (https://docs.conda.io/en/latest/miniconda.html) or Anaconda (https://www.anaconda.com/) the required packages can be easily installed from the yml file `packages.yml`. In a terminal execute:
 ```bash
