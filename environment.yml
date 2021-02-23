@@ -3,8 +3,9 @@ channels:
   - bioconda
   - defaults
 dependencies:
+  - python==3.6.10
   - numpy==1.18.1
   - tensorflow==1.15.0
   - pandas==1.0.1
   - biopython==1.76
-  - python=3.6.10
+  - keras==2.3.1

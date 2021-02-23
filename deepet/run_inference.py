@@ -13,6 +13,9 @@ from Bio import AlignIO
 from deepet import my_callbacks
 from pkg_resources import resource_stream, resource_filename, resource_exists
 
+ALANINE = [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] # sets global vareable ALANINE as a one hot reprecentation of alanine
+NOTHING = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] # sets global vareable NOTHING as a one hot reprecentation that's empty
+
 
 class DeepETInference(object):
     '''
@@ -41,8 +44,25 @@ class DeepETInference(object):
         self.build_bottleneck_model(model=self.model, layer_name=self.layer)
 
 
-
     def run_inference(self, filepath):
+        '''
+        Accept fasta file path and make predictions for each of these.
+        Return data frame.
+        '''
+        # read sequences into a Pandas series with sequences and identifiers
+        seqs = self._series_from_seqio(filepath, 'fasta')
+        seqs = seqs.str.rstrip('*')
+
+        # one-hot encoding of sequences
+        encoded_seqs = self.seq_to_encoding(seqs)
+
+        # get sequence predictions
+        predictions = self.model.predict(encoded_seqs)
+
+        return pd.DataFrame(predictions)
+
+
+    def get_embeddings(self, filepath):
         '''
         Accept fasta file path and obtain embeddings for each of these.
         Return data frame.
@@ -58,6 +78,55 @@ class DeepETInference(object):
         embeddings = self.bottleneck_model.predict(encoded_seqs)
 
         return pd.DataFrame(embeddings)
+
+
+    def occlusion_1d(self, seq, window, padding=2000):
+        '''
+        Occlude a single sequence using a sliding window.
+        Return the original temp, temperature change and a
+        z-score for each position indicating sensititivity.
+        '''
+        seq = self._to_binary(seq.rstrip('*'))
+        size_seq = len(seq)
+
+        # first predict the unchanged sequence
+        original_seq = self._zero_padding(seq, padding)
+        wt_pred = self.model.predict( original_seq.reshape([1, original_seq.shape[0], original_seq.shape[1]]) )[0]
+
+        seqs = []
+        for i in range(0, size_seq - window):
+
+            # create empty array same shape as the one-hot sequence
+            tmp = np.zeros((seq.shape[0], seq.shape[1]))
+
+            # one-dimensional vector to index which amino acids to replace
+            logic = np.zeros(seq.shape[0], dtype = bool)
+            logic[i:i+window] = True
+
+            # do the replacement
+            tmp[logic,:] = NOTHING
+            tmp[~logic,:] = seq[~logic,:]
+
+            # pad sequence to full length
+            tmp = self._zero_padding(tmp, padding)
+            seqs.append(tmp)
+
+        seqs = np.array(seqs)
+
+        # predict for the occluded sequences
+        predictions = self.model.predict(seqs)
+
+        # compute the average prediction for each position
+        window_average = np.convolve(predictions.reshape(-1), np.ones(window)/window, mode='valid')
+
+        # what's the change in temperature?
+        change = (wt_pred - window_average)
+
+        # compute a z-score
+        z_score = (change-np.mean(change))/np.std(change)
+
+        return wt_pred, change, z_score
+
 
 
     def _series_from_seqio(self, fn, format, **kwargs):

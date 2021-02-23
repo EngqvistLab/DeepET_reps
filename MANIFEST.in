@@ -4,3 +4,4 @@ include LICENSE.txt
 # Include the data files
 recursive-include deepet/best_ogt_model *
 recursive-include deepet/best_ogt_model *
+recursive-include data/ *
