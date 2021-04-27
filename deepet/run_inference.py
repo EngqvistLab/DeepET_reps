@@ -10,11 +10,13 @@ from tensorflow.keras import Model
 from Bio import SeqIO
 from Bio import AlignIO
 
+import protein_feature_calculations as pfc
+
 from deepet import my_callbacks
 from pkg_resources import resource_stream, resource_filename, resource_exists
 
-ALANINE = [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] # sets global vareable ALANINE as a one hot reprecentation of alanine
-NOTHING = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] # sets global vareable NOTHING as a one hot reprecentation that's empty
+ALANINE = [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] # sets global vareable ALANINE as a one hot representation of alanine
+NOTHING = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] # sets global vareable NOTHING as a one hot representation that's empty
 
 
 class DeepETInference(object):
@@ -80,11 +82,29 @@ class DeepETInference(object):
         return pd.DataFrame(embeddings)
 
 
+    def occlusion_1d_pdb(self, pdb, window, padding=2000):
+        '''
+        Extract sequence from PDB structure,
+        then occlude using a sliding window.
+        Return the original predicted temp, temperature
+        change and a z-score for each position
+        indicating sensititivity.
+        '''
+        # get seqres from structure
+        # here
+
+        # Occlude chain A
+        # seq = x['A']
+        raise NotImplementedError
+        return self.occlusion_1d(seq, window, padding)
+
+
     def occlusion_1d(self, seq, window, padding=2000):
         '''
         Occlude a single sequence using a sliding window.
-        Return the original temp, temperature change and a
-        z-score for each position indicating sensititivity.
+        Return the original predicted temp, temperature
+        change and a z-score for each position
+        indicating sensititivity.
         '''
         seq = self._to_binary(seq.rstrip('*'))
         size_seq = len(seq)
@@ -119,14 +139,25 @@ class DeepETInference(object):
         # compute the average prediction for each position
         window_average = np.convolve(predictions.reshape(-1), np.ones(window)/window, mode='valid')
 
-        # what's the change in temperature?
-        change = (wt_pred - window_average)
+        # compute the change in temperature, as a fraction of the WT prediction
+        change = (wt_pred - window_average) / wt_pred
 
         # compute a z-score
         z_score = (change-np.mean(change))/np.std(change)
 
         return wt_pred, change, z_score
 
+
+    def occlusion_3d(self, pdb, radius, padding=2000):
+        '''
+        Using a protein structure (PDB format), for each
+        position occlude all residues that it is within
+        a certain radius of (excluding neighboring residues).
+        Return the original predicted temp, temperature
+        change and a z-score for each position
+        indicating sensititivity.
+        '''
+        pass
 
 
     def _series_from_seqio(self, fn, format, **kwargs):
