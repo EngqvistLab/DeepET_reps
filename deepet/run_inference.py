@@ -114,7 +114,7 @@ class DeepETInference(object):
         wt_pred = self.model.predict( original_seq.reshape([1, original_seq.shape[0], original_seq.shape[1]]) )[0]
 
         seqs = []
-        for i in range(0, size_seq - window):
+        for i in range(0, size_seq - window + 1):
 
             # create empty array same shape as the one-hot sequence
             tmp = np.zeros((seq.shape[0], seq.shape[1]))
