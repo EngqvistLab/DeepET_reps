@@ -1,0 +1,158 @@
+---
+title: "Obtain a non-redundant set of AA indices for given sequences"
+---
+
+Generate all AAindex values for given set of sequences,
+then keep only uncorrelated AA indices.
+
+Include also KYTJ820101 Hydropathy index (Kyte-Doolittle, 1982) since it 
+appears frequently in literature + we want to make sure to have this type of property.
+
+
+```{r, setup, message=F}
+library("bio3d")
+library("rhdf5")
+library("tidyverse")
+library("Biostrings")
+library("progress")
+```
+
+```{r}
+prot_seq <- Biostrings::readAAStringSet(
+    "../DeepET_reps/data/cleaned_enzyme_topts_with_structures.fasta"
+    )
+
+prot_seq <- tibble(
+    uniprot_ac = names(prot_seq),
+    seq = paste(prot_seq)
+    ) %>% 
+    dplyr::mutate(uniprot_ac = base::sapply(
+        uniprot_ac,
+        function(id_str) {
+           stringr::str_split(id_str, pattern = "\\;")[[1]][[1]]
+        })
+    )
+```
+
+## Get AAindex profiles
+
+Get values from all AA indices (release 9.1 2006), then remove redundant indices
+(based on a subsample of 1000 sequences, for the sake of memory and time)
+
+```{r}
+data(aa.index)
+N_SEQ_SUBSAMPLE = 1000
+
+#' For the given protein sequence, 
+#' return correlation matrix of all AAindices calculated on the sequence.
+#' NOTE: Assumes aa.index loaded into namespace, i.e. \code{data(aa.index)}
+aaindex_corr_matrix_for_seq <- function(prot_seq) {
+    index_values_for_seq <- base::sapply(
+        names(aa.index),
+        function(aa_idx) { 
+            aa2index(str_split(prot_seq, pattern = "")[[1]], index = aa_idx, window = 1) }
+    )
+    return(cor(index_values_for_seq, use = "complete.obs"))
+}
+
+aaindex_corr_matrices <- 
+    lapply(
+        prot_seq %>% dplyr::sample_n(N_SEQ_SUBSAMPLE) %>% select(seq) %>% pull,
+        aaindex_corr_matrix_for_seq
+        )
+
+print(length(aaindex_corr_matrices))
+aaindex_avg_corr_matrix <- abs(base::Reduce("+", aaindex_corr_matrices) / N_SEQ_SUBSAMPLE)
+
+# Clean up large list of matrices
+rm(aaindex_corr_matrices)
+gc()
+```
+
+```{r}
+reshape2::melt(na.omit(aaindex_avg_corr_matrix)) %>% 
+ggplot(aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile() +
+  scale_fill_gradient2(low = "white", high = "black", na.value = "pink") +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+```
+
+```{r, message=F}
+library("caret")
+correlated_indices = sort(caret::findCorrelation(na.omit(aaindex_avg_corr_matrix),
+                                                 cutoff = 0.5))
+uncorr_indices <- base::colnames(aaindex_avg_corr_matrix[-c(correlated_indices),
+                                                         -c(correlated_indices)])
+uncorr_indices <- c(uncorr_indices, "KYTJ820101")
+```
+
+```{r}
+uncorr_indices
+```
+
+```{r}
+reshape2::melt(na.omit(aaindex_avg_corr_matrix[c(uncorr_indices),
+                                               c(uncorr_indices)])) %>% 
+ggplot(aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile() +
+  scale_fill_gradient2(low = "white", high = "black", na.value = "pink") +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+```
+
+
+```{r}
+prog_bar <- progress_bar$new(total = length(uncorr_indices))
+
+for (aa_index in uncorr_indices) {
+    prog_bar$tick()
+    
+    prot_seq[[aa_index]] = base::sapply(
+        prot_seq[["seq"]],
+        function(seq) {
+            aa2index(str_split(seq, pattern = "")[[1]], 
+                     index = aa_index, 
+                     window = 1)
+        }
+    )
+}
+
+prot_profiles <- prot_seq %>% select(-seq)
+```
+
+
+```{r}
+protein_ids <- prot_profiles %>% select(uniprot_ac) %>% pull
+```
+
+
+```{r}
+store_file <- "data/protein_features/uncorr_aaindex_profiles.h5"
+if (!h5createFile(store_file)){
+    stop("Could not create H5 store")
+
+} else {
+    prog_bar <- progress_bar$new(total = length(protein_ids))
+    for (prot_id in protein_ids) {
+        prog_bar$tick()
+        
+        prot_data <- prot_profiles %>% dplyr::filter(uniprot_ac == prot_id)
+        
+        h5createGroup(store_file, prot_id)
+        
+        for (aa_index in uncorr_indices) {
+            index_values <- prot_data %>% dplyr::select(all_of(aa_index)) %>% pull
+            attr(index_values, "names") <- NULL
+            h5write(index_values, store_file, base::paste(prot_id, aa_index, sep = "/"))
+        }
+    }
+    
+}
+```
+
+
