@@ -3,14 +3,12 @@ import numpy as np
 import pandas as pd
 from os.path import join
 
-import tensorflow as tf
+from scipy.ndimage.filters import uniform_filter1d
 from tensorflow.keras.models import load_model
 from tensorflow.keras import Model
 
 from Bio import SeqIO
 from Bio import AlignIO
-
-import protein_feature_calculations as pfc
 
 from deepet import my_callbacks
 from pkg_resources import resource_stream, resource_filename, resource_exists
@@ -106,12 +104,13 @@ class DeepETInference(object):
         change and a z-score for each position
         indicating sensititivity.
         '''
-        seq = self._to_binary(seq.rstrip('*'))
         size_seq = len(seq)
+        seq = self._to_binary(seq.rstrip('*'))
 
         # first predict the unchanged sequence
         original_seq = self._zero_padding(seq, padding)
-        wt_pred = self.model.predict( original_seq.reshape([1, original_seq.shape[0], original_seq.shape[1]]) )[0]
+        in_shape = [1, original_seq.shape[0], original_seq.shape[1]]
+        wt_pred = self.model.predict(original_seq.reshape(in_shape))[0]
 
         seqs = []
         for i in range(0, size_seq - window + 1):
@@ -136,11 +135,13 @@ class DeepETInference(object):
         # predict for the occluded sequences
         predictions = self.model.predict(seqs)
 
-        # compute the average prediction for each position
-        window_average = np.convolve(predictions.reshape(-1), np.ones(window)/window, mode='valid')
+        # compute moving average across the vector of perturbation predictions
+        window_moving_average = uniform_filter1d(predictions.reshape(-1),
+                                                 size=window,
+                                                 mode='nearest')
 
         # compute the change in temperature, as a fraction of the WT prediction
-        change = (wt_pred - window_average) / wt_pred
+        change = (wt_pred - window_moving_average) / wt_pred
 
         # compute a z-score
         z_score = (change-np.mean(change))/np.std(change)
